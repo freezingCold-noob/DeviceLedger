@@ -7,6 +7,7 @@
 import sqlite3
 
 from fastapi import FastAPI
+from pydantic import BaseModel
 
 app = FastAPI()
 
@@ -14,13 +15,24 @@ DB = "ops.db"
 
 
 def query(sql, params=()):
-    """开库 → 执行 → 取结果 → 关库，四步封装成一个函数"""
+    """只读：开库 → 执行 → 取结果 → 关库"""
     conn = sqlite3.connect(DB)
     cur = conn.cursor()
     cur.execute(sql, params)
     rows = cur.fetchall()
     conn.close()
     return rows
+
+
+def execute(sql, params=()):
+    """只写：开库 → 执行 → 提交 → 关库，返回改动了几行"""
+    conn = sqlite3.connect(DB)
+    cur = conn.cursor()
+    cur.execute(sql, params)
+    changed = cur.rowcount
+    conn.commit()
+    conn.close()
+    return changed
 
 
 @app.get("/device_status")
@@ -58,3 +70,22 @@ def expired_devices():
 def device_count():
     rows = query("SELECT COUNT(*) FROM devices")
     return {"device_count": rows[0][0]}
+
+class FaultReport(BaseModel):
+    name: str
+
+
+@app.post("/report_fault")
+def report_fault(body: FaultReport):
+    """值班员报故障：这台设备坏了"""
+
+    sql = """
+        UPDATE devices SET status = '故障' WHERE name = ?
+    """
+
+    changed = execute(sql, (body.name,))
+
+    if changed == 0:
+        return {"ok": False, "message": f"台账里没有叫「{body.name}」的设备"}
+
+    return {"ok": True, "name": body.name, "status": "故障"}

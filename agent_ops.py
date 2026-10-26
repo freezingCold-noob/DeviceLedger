@@ -68,6 +68,21 @@ tools = [
             "parameters": {"type": "object", "properties": {}},
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "report_fault",
+            "description": "报修一台设备，把它的状态改成故障。当用户说「XX 坏了」「XX 出故障了」「报修 XX」时调用。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "设备名，例如 核心交换机"}
+                },
+                "required": ["name"],
+            },
+        },
+    },
+
 ]
 
 # ★ 路由表：工具名 → HTTP 方法
@@ -76,58 +91,73 @@ methods = {
     "fault_count": "get",
     "expired_devices": "get",
     "device_count": "get",
+    "report_fault": "post",
+
 }
 
 # ★ 想试别的问法，改这一行就行
 QUESTION = "机房一共几台设备？"
 
-# ── 对话记录：从「用户说的第一句话」开始 ──────────────
-messages = [{"role": "user", "content": QUESTION}]
+MAX_ROUNDS = 10  # 保险丝：一个问题的工具调用最多转 10 轮
 
-round_num = 0
-MAX_ROUNDS = 10  # 保险丝：最多转 10 轮，防止死循环
+# 对话记录。一开始是空的，用户说什么就往里塞。
+messages = []
 
-while round_num < MAX_ROUNDS:
-    round_num += 1
-    print(f"\n──── 第 {round_num} 轮 ────")
 
-    # ① 问模型：接下来该干嘛？
-    body = {"model": "deepseek-chat", "messages": messages, "tools": tools}
-    message = requests.post(url, headers=headers, json=body).json()["choices"][0]["message"]
+def ask(question):
+    """问一个问题，内部自己跑工具循环，最后返回它说的话"""
+    messages.append({"role": "user", "content": question})
 
-    # 它这条回复要记进历史（里面有 tool_calls）
-    messages.append(message)
+    round_num = 0
+    while round_num < MAX_ROUNDS:
+        round_num += 1
+        print(f"\n──── 第 {round_num} 轮 ────")
 
-    tool_calls = message.get("tool_calls")
+        body = {"model": "deepseek-chat", "messages": messages, "tools": tools}
+        message = requests.post(url, headers=headers, json=body).json()["choices"][0]["message"]
 
-    # ② 它不要工具了 → 说明它准备说人话了 → 结束循环
-    if not tool_calls:
-        print("⑥ 它说：")
-        print(message["content"])
+        messages.append(message)
+
+        tool_calls = message.get("tool_calls")
+
+        if not tool_calls:
+            return message["content"]
+
+        print(f"① 它想调 {len(tool_calls)} 个工具")
+
+        for tc in tool_calls:
+            name = tc["function"]["name"]
+            args = json.loads(tc["function"]["arguments"])
+            print(f"   ② 调 {name} | 参数 {args}")
+
+            my_url = f"http://127.0.0.1:8001/{name}"
+            method = methods[name]
+
+            # 查：参数挂网址；改：参数装信封
+            if method == "get":
+                result = requests.request(method, my_url, params=args).json()
+            else:
+                result = requests.request(method, my_url, json=args).json()
+            print(f"   ③ 接口回了：{result}")
+
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": tc["id"],
+                    "content": json.dumps(result, ensure_ascii=False),
+                }
+            )
+
+    return "（转太多轮了，我先停下，可能是接口一直出错）"
+
+
+# ── 外层循环：一直等你说话 ────────────────────────────
+while True:
+    question = input("\n你问（输入 exit 退出）：")
+
+    if question.strip() in ("exit", "quit", ""):
+        print("再见。")
         break
 
-    # ③ 它要工具：可能一个，也可能好几个，全都执行
-    print(f"① 它想调 {len(tool_calls)} 个工具")
-
-    for tc in tool_calls:
-        name = tc["function"]["name"]
-        args = json.loads(tc["function"]["arguments"])
-        print(f"   ② 调 {name} | 参数 {args}")
-
-        my_url = f"http://127.0.0.1:8001/{name}"
-        result = requests.request(methods[name], my_url, params=args).json()
-        print(f"   ③ 接口回了：{result}")
-
-        # ④ 把结果一条一条塞回历史，一个 tool_call 配一条结果
-        messages.append(
-            {
-                "role": "tool",
-                "tool_call_id": tc["id"],
-                "content": json.dumps(result, ensure_ascii=False),
-            }
-        )
-    # 循环回去，再问一次模型
-
-else:
-    # while 后面这个 else：只有「没走 break」才会执行到这里
-    print(f"⚠️ 转满 {MAX_ROUNDS} 轮还没结束，强制停止（多半是工具一直报错，它在反复重试）")
+    answer = ask(question)
+    print(f"\n它答：{answer}")
