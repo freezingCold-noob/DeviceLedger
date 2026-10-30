@@ -82,7 +82,20 @@ tools = [
             },
         },
     },
-
+    {
+        "type": "function",
+        "function": {
+            "name": "warranty_status",
+            "description": "查某台设备的保修到期日和是否过保。当用户问「XX 过保了吗」「XX 保修到什么时候」时调用。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "设备名，例如 核心交换机"}
+                },
+                "required": ["name"],
+            },
+        },
+    },
 ]
 
 # ★ 路由表：工具名 → HTTP 方法
@@ -92,7 +105,7 @@ methods = {
     "expired_devices": "get",
     "device_count": "get",
     "report_fault": "post",
-
+    "warranty_status": "get",
 }
 
 # ★ 想试别的问法，改这一行就行

@@ -89,3 +89,19 @@ def report_fault(body: FaultReport):
         return {"ok": False, "message": f"台账里没有叫「{body.name}」的设备"}
 
     return {"ok": True, "name": body.name, "status": "故障"}
+
+@app.get("/warranty_status")
+def warranty_status(name: str):
+    """值班员问：这台设备过保了没？"""
+
+    sql = """
+        SELECT warranty_end, warranty_end < date('now') FROM devices WHERE name = ?
+
+    """
+
+    rows = query(sql, (name,))
+
+    if not rows:
+        return {"ok": False, "message": f"台账里没有叫「{name}」的设备"}
+
+    return {"name": name, "warranty_end": rows[0][0], "expired": bool(rows[0][1])}
