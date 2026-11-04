@@ -150,7 +150,7 @@ DEEPSEEK_API_KEY=sk-你的key
 | `agent_ops.py` | Tool Calling 主循环、工具清单、路由表 |
 | `demo_rounds.py` | 调试用：把每一轮发给大模型的 `messages` 原样打印出来 |
 | `ops_query.py` | 命令行版的查询脚本 |
-| `devices_db.py` / `stats.py` / `ledger.db` | 早期版本（4 列表单的台账 + 分组统计），保留作演进记录 |
+| `devices_db.py` / `stats.py` | 早期版本（4 列表单的台账 + 分组统计），保留作演进记录。对应的 `*.db` 数据库文件被 `.gitignore` 排除，不在仓库里 |
 
 ---
 
