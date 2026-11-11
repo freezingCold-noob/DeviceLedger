@@ -115,6 +115,12 @@ def search(question, k=TOP_K):
     return scored[:k]
 
 
+def context(question, k=TOP_K):
+    """给别的程序用：只要拼好的资料文本，不打印、不问模型"""
+    hits = search(question, k)
+    return "\n\n".join(f"[片段{cid}]\n{text}" for _, cid, _, text in hits)
+
+
 # ══════════════════════════════════════════════════
 #  ⑤ 组装 prompt → 问模型（和上一版一样）
 # ══════════════════════════════════════════════════

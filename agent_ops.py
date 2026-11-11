@@ -14,6 +14,8 @@ import os
 import requests
 from dotenv import load_dotenv
 
+import rag_vec as RAG          # ★ 新加：借它的检索能力（查手册）
+
 load_dotenv()
 
 api_key = os.getenv("DEEPSEEK_API_KEY")
@@ -119,6 +121,25 @@ messages = []
 
 def ask(question):
     """问一个问题，内部自己跑工具循环，最后返回它说的话"""
+
+    # ★ 新加：先在手册里找 3 段，塞进 system
+    #   这样它既有"工具"（查数据库），又有"资料"（查手册）
+    ctx = RAG.context(question)
+    system = {
+        "role": "system",
+        "content": (
+            "你是机房值班助手。\n"
+            "· 问设备台账（状态/数量/过保/报修）→ 调工具查数据库\n"
+            "· 问原因、怎么办、故障怎么处理 → 用下面这份手册资料回答，并标注（片段X）\n"
+            "· 手册里没有的，直接说没写，不要凭常识编\n\n"
+            f"手册资料：\n{ctx}"
+        ),
+    }
+    if messages and messages[0]["role"] == "system":
+        messages[0] = system          # 每个问题都换一份新资料
+    else:
+        messages.insert(0, system)
+
     messages.append({"role": "user", "content": question})
 
     round_num = 0
